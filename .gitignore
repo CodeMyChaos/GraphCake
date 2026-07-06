@@ -16,3 +16,4 @@
 src/main.cpp
 build/
 .vscode/
+.idea/
