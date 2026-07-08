@@ -1,21 +1,20 @@
-//
-// Created by kwojc on 6.07.2026.
-//
-
-export module graph;
+export module graphCake.graph;
 #include <cstdint>
 
+import graphCake.concepts;
 
+namespace graphCake::graph {
+    export template<concepts::EdgeCompliant Edge>
+    struct EdgeInfo {
+        Edge& data;
+        std::size_t source;
+        std::size_t target;
+    };
 
-namespace GraphCake {
-    class Graph {
-    public:
-        template<typename T>
-        Graph(T t) {
-
-        };
-
-    private:
-        std::uint8_t buffer[128];
+    export enum class EdgeType {
+        Unidirectional,
+        Bidirectional
     };
 }
+
+
