@@ -1,28 +1,18 @@
-cmake_minimum_required(VERSION 3.20)
-project(Graphs)
+cmake_minimum_required(VERSION 4.3.1 FATAL_ERROR)
 
-set(CMAKE_CXX_FLAGS "-std=c++23")
+set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "451f2fe2-a8a2-47c3-bc32-94786d8fc91b")
+project(graphCake LANGUAGES CXX)
 
-add_subdirectory(src)
-add_subdirectory(test)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
-find_program(CLANG_FORMAT "clang-format")
+include(FetchContent)
+FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        v1.17.0
+)
+FetchContent_MakeAvailable(googletest)
 
-if (CLANG_FORMAT)
-
-    file(GLOB_RECURSE ALL_PROJECT_FILES 
-        "${PROJECT_SOURCE_DIR}/src/*.cpp" 
-        "${PROJECT_SOURCE_DIR}/inc/*.h"
-        "${PROJECT_SOURCE_DIR}/inc/*.hpp"
-        "${PROJECT_SOURCE_DIR}/test/*.cpp" 
-        "${PROJECT_SOURCE_DIR}/test/*.h" 
-        "${PROJECT_SOURCE_DIR}/main.cpp")
-
-    add_custom_target(format
-        COMMAND clang-format 
-        -i
-        -style=file:/home/gerwant/repos/git-scripts/.clang-format
-        ${ALL_PROJECT_FILES}
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMENT "Running clang-format")
-endif()
+add_subdirectory(modules)
+add_subdirectory(tests)

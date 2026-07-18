@@ -1,19 +1,20 @@
-export module graphCake.representations;
-#include <algorithm>
-#include <expected>
-#include <ranges>
-#include <vector>
+module;
 
+#include <expected>
+
+export module graphCake.representations;
+import std;
 import graphCake.concepts;
 import graphCake.graph;
 
 namespace graphCake::representations {
     export enum class SetError {
+        Ok,
         SourceVertexNotExist,
         TargetVertexNotExist
     };
 
-    template<concepts::VertexCompliant Vertex, concepts::EdgeCompliant Edge>
+    export template<concepts::VertexCompliant Vertex, concepts::EdgeCompliant Edge>
     class AdjacencyList {
     public:
         using Vertex_t = Vertex;
@@ -21,23 +22,47 @@ namespace graphCake::representations {
 
         using EdgeInfo = graph::EdgeInfo<Edge>;
 
-        auto add_vertex(Vertex vertex = {}) -> Vertex& {
+        auto add_vertex() -> Vertex& {
             edges.emplace_back();
-            return vertices.emplace_back(std::move(vertex));
+            return vertices.emplace_back();
+        }
+
+        auto add_vertex(Vertex&& vertex) -> Vertex& {
+            edges.emplace_back();
+            return vertices.emplace_back(std::forward<Vertex>(vertex));
+        }
+
+        auto vertex_count() -> std::size_t {
+            return vertices.size();
         }
 
         template<graph::EdgeType edge_type = graph::EdgeType::Unidirectional>
-        auto add_edge(Edge edge, std::size_t source_vertex, std::size_t target_vertex) -> std::expected<EdgeInfo&, SetError> {
+        auto add_edge(std::size_t source_vertex, std::size_t target_vertex) -> SetError {
             if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return SetError::SourceVertexNotExist;
             if (target_vertex >= vertices.size() or target_vertex >= edges.size()) return SetError::TargetVertexNotExist;
 
-            auto& added_edge = edges.at(source_vertex).emplace_back(TargetedEdge{.edge = std::move(edge), .target = target_vertex});
+            auto& added_edge = edges.at(source_vertex).emplace_back();
+            added_edge.target = target_vertex;
 
             if constexpr (edge_type == graph::EdgeType::Bidirectional) {
+                if (source_vertex == target_vertex) return SetError::Ok;
                 edges.at(target_vertex).emplace_back(added_edge);
             }
+            return SetError::Ok;
+        }
 
-            return EdgeInfo{.data = added_edge.edge, .source = source_vertex, .target = added_edge.target};
+        template<graph::EdgeType edge_type = graph::EdgeType::Unidirectional>
+        auto add_edge(std::size_t source_vertex, std::size_t target_vertex, Edge&& edge) -> SetError {
+            if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return SetError::SourceVertexNotExist;
+            if (target_vertex >= vertices.size() or target_vertex >= edges.size()) return SetError::TargetVertexNotExist;
+
+            auto& added_edge = edges.at(source_vertex).emplace_back(std::forward<Edge>(edge), target_vertex);
+
+            if constexpr (edge_type == graph::EdgeType::Bidirectional) {
+                if (source_vertex == target_vertex) return SetError::Ok;
+                edges.at(target_vertex).emplace_back(added_edge);
+            }
+            return SetError::Ok;
         }
 
         [[nodiscard]] auto get_edge(std::size_t source_vertex, std::size_t target_vertex) -> std::optional<EdgeInfo> {
@@ -106,8 +131,8 @@ namespace graphCake::representations {
 
     private:
         struct TargetedEdge {
-            Edge edge;
-            std::size_t target;
+            Edge edge{};
+            std::size_t target{};
         };
 
         std::vector<Vertex> vertices = {};
@@ -117,21 +142,25 @@ namespace graphCake::representations {
     export template<concepts::VertexCompliant Vertex, concepts::EdgeCompliant Edge>
     class AdjacencyMatrix {
     public:
-        using Vertex = Vertex;
-        using Edge = Edge;
+        using Vertex_t = Vertex;
+        using Edge_t = Edge;
 
         using EdgeInfo = graph::EdgeInfo<Edge>;
 
-        auto add_vertex(Vertex vertex = {}) -> Vertex& {
-            edges.emplace_back(std::vector<Edge>{edges.size(), std::nullopt});
+        auto add_vertex(Vertex&& vertex = {}) -> Vertex& {
+            edges.emplace_back({edges.size(), std::nullopt});
             for (auto& row : edges) {
                 row.emplace_back(std::nullopt);
             }
-            return vertices.emplace_back(std::move(vertex));
+            return vertices.emplace_back(std::forward<Vertex>(std::move(vertex)));
+        }
+
+        auto vertex_count() -> std::size_t {
+            return vertices.size();
         }
 
         template<graph::EdgeType edge_type = graph::EdgeType::Unidirectional>
-        auto add_edge(Edge edge, std::size_t source_vertex, std::size_t target_vertex) -> std::expected<EdgeInfo, SetError> {
+        auto add_edge(std::size_t source_vertex, std::size_t target_vertex, Edge&& edge = {}) -> SetError {
             if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return SetError::SourceVertexNotExist;
             if (target_vertex >= vertices.size() or target_vertex >= edges.at(source_vertex).size()) return SetError::TargetVertexNotExist;
 
@@ -140,13 +169,13 @@ namespace graphCake::representations {
                 if (source_vertex >= edges.at(target_vertex).size()) return SetError::SourceVertexNotExist;
             }
 
-            auto& added_edge = (edges[source_vertex][target_vertex] = std::move(edge));
+            auto& added_edge = (edges[source_vertex][target_vertex] = std::forward<Edge>(std::move(edge)));
 
             if constexpr (edge_type == graph::EdgeType::Bidirectional) {
                 edges[target_vertex][source_vertex] = added_edge;
             }
 
-            return EdgeInfo {.data = added_edge.value(), .source = source_vertex, .target = target_vertex};
+            return SetError::Ok;
         }
 
         [[nodiscard]] auto get_edge(std::size_t source_vertex, std::size_t target_vertex) -> std::optional<EdgeInfo> {

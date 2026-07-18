@@ -1,5 +1,5 @@
 export module graphCake.concepts;
-#include <concepts>
+import std;
 
 namespace graphCake::concepts {
     export template<typename T>
