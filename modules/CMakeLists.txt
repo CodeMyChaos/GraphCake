@@ -2,7 +2,9 @@ set(MODULES concepts.ixx
         deserializer.ixx
         graph.ixx
         graphCake.ixx
-        representations.ixx
+        representations/adjacency_matrix.ixx
+        representations/adjacency_list.ixx
+        representations/representations.ixx
         serializer.ixx
         types.ixx)
 
