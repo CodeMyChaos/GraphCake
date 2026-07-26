@@ -1,2 +1,1 @@
-export module graphCake;
-import std;
+export module graph_cake;

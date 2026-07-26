@@ -1,256 +1,185 @@
 module;
 
 #include <expected>
+#include <ranges>
 
-export module graphCake.representations;
+export module graph_cake.representations;
+import graph_cake.concepts;
+import graph_cake.graph;
+import graph_cake.types;
 import std;
-import graphCake.concepts;
-import graphCake.graph;
 
-namespace graphCake::representations {
-    export enum class SetError {
-        Ok,
-        SourceVertexNotExist,
-        TargetVertexNotExist
-    };
+namespace graph_cake {
+export template<vertex_like _vertex, edge_like _edge>
+class adjacency_list {
+    using info = edge_info<_edge&>;
 
-    export template<concepts::VertexCompliant Vertex, concepts::EdgeCompliant Edge>
-    class AdjacencyList {
-    public:
-        using Vertex_t = Vertex;
-        using Edge_t = Edge;
+public:
+    using vertex = _vertex;
+    using edge   = _edge;
 
-        using EdgeInfo = graph::EdgeInfo<Edge>;
+    auto add_vertex() -> _vertex& {
+        edges.emplace_back();
+        return vertices.emplace_back();
+    }
 
-        auto add_vertex() -> Vertex& {
-            edges.emplace_back();
-            return vertices.emplace_back();
+    auto add_vertex(_vertex&& vertex) -> _vertex& {
+        edges.emplace_back();
+        return vertices.emplace_back(std::forward<_vertex>(vertex));
+    }
+
+    auto vertex_count() -> std::size_t {
+        return vertices.size();
+    }
+
+    template<edge_type _edge_type = edge_type::unidirectional>
+    auto add_edge(std::size_t source_vertex, std::size_t target_vertex) -> bool try {
+        auto& added_edge = edges.at(source_vertex).emplace_back(source_vertex, target_vertex);
+        if constexpr (_edge_type == edge_type::bidirectional) {
+            if (source_vertex == target_vertex) return true;
+            edges.at(target_vertex).emplace_back(added_edge);
         }
+        return true;
+    } catch (std::out_of_range&) { return false; }
 
-        auto add_vertex(Vertex&& vertex) -> Vertex& {
-            edges.emplace_back();
-            return vertices.emplace_back(std::forward<Vertex>(vertex));
+    template<edge_type _edge_type = edge_type::unidirectional>
+    auto add_edge(std::size_t source_vertex, std::size_t target_vertex, _edge&& edge) -> bool try {
+        auto& added_edge =
+            edges.at(source_vertex)
+                .emplace_back(source_vertex, target_vertex, std::forward<_edge>(edge));
+
+        if constexpr (_edge_type == edge_type::bidirectional) {
+            if (source_vertex == target_vertex) return true;
+            edges.at(target_vertex).emplace_back(added_edge);
         }
+        return true;
+    } catch (std::out_of_range&) { return false; }
 
-        auto vertex_count() -> std::size_t {
-            return vertices.size();
-        }
+    [[nodiscard]] auto get_edge(std::size_t source_vertex, std::size_t target_vertex)
+        -> std::optional<info> try {
+        auto edge =
+            std::ranges::find(edges.at(source_vertex), target_vertex, &edge_info<_edge>::target);
+        if (edge == edges.at(source_vertex).end()) return std::nullopt;
+        return info {.source = source_vertex, .target = target_vertex, .data = *edge};
+    } catch (std::out_of_range&) { return std::nullopt; }
 
-        template<graph::EdgeType edge_type = graph::EdgeType::Unidirectional>
-        auto add_edge(std::size_t source_vertex, std::size_t target_vertex) -> SetError {
-            if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return SetError::SourceVertexNotExist;
-            if (target_vertex >= vertices.size() or target_vertex >= edges.size()) return SetError::TargetVertexNotExist;
+    [[nodiscard]] auto get_outbound_edges_of(std::size_t vertex) -> std::vector<info&> try {
+        return {edges.at(vertex)};
+    } catch (std::out_of_range&) { return {}; }
 
-            auto& added_edge = edges.at(source_vertex).emplace_back();
-            added_edge.target = target_vertex;
-
-            if constexpr (edge_type == graph::EdgeType::Bidirectional) {
-                if (source_vertex == target_vertex) return SetError::Ok;
-                edges.at(target_vertex).emplace_back(added_edge);
-            }
-            return SetError::Ok;
-        }
-
-        template<graph::EdgeType edge_type = graph::EdgeType::Unidirectional>
-        auto add_edge(std::size_t source_vertex, std::size_t target_vertex, Edge&& edge) -> SetError {
-            if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return SetError::SourceVertexNotExist;
-            if (target_vertex >= vertices.size() or target_vertex >= edges.size()) return SetError::TargetVertexNotExist;
-
-            auto& added_edge = edges.at(source_vertex).emplace_back(std::forward<Edge>(edge), target_vertex);
-
-            if constexpr (edge_type == graph::EdgeType::Bidirectional) {
-                if (source_vertex == target_vertex) return SetError::Ok;
-                edges.at(target_vertex).emplace_back(added_edge);
-            }
-            return SetError::Ok;
-        }
-
-        [[nodiscard]] auto get_edge(std::size_t source_vertex, std::size_t target_vertex) -> std::optional<EdgeInfo> {
-            if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return std::nullopt;
-            if (target_vertex >= vertices.size() or target_vertex >= edges.size()) return std::nullopt;
-
-            auto edge = std::ranges::find(edges.at(source_vertex), target_vertex, &TargetedEdge::target);
-
-            if (edge == edges.at(source_vertex).end()) return std::nullopt;
-            return EdgeInfo {.data = edge->edge, .source = source_vertex, .target = edge->target};
-        }
-
-        [[nodiscard]] auto get_outbound_edges_of(std::size_t vertex) -> std::vector<EdgeInfo> {
-            if (vertex >= vertices.size() or vertex >= edges.size()) return {};
-
-            auto toEdgeInfo = [&](const auto& edge) {
-                return EdgeInfo{.data = edge.edge, .source = vertex, .target = edge.target};
-            };
-            return edges.at(vertex) | std::views::transform(toEdgeInfo);
-        }
-
-        [[nodiscard]] auto get_inbound_edges_of(std::size_t vertex) -> std::vector<EdgeInfo> {
-            if (vertex >= vertices.size() or vertex >= edges.size()) return {};
-
-            auto isVertexTarget = [&](const auto& target) {
-                return target == vertex;
-            };
-            return get_all_edges() | std::views::filter(isVertexTarget, &EdgeInfo::target);
-        }
-
-        [[nodiscard]] auto get_all_vertices() -> std::vector<Vertex&> {
-            return { vertices };
-        }
-
-        [[nodiscard]] auto get_all_edges() -> std::vector<EdgeInfo> {
-            std::vector<EdgeInfo> all_edges = {};
-
-            for (const auto index : std::views::iota(0, edges.size())) {
-                auto toEdgeInfo = [&](const auto& edge) {
-                    return EdgeInfo{.data = edge.edge, .source = index, .target = edge.target};
-                };
-                all_edges.emplace_back(edges.at(index) | std::views::transform(toEdgeInfo));
-            }
-            return all_edges;
-        }
-
-        auto remove_vertex(std::size_t vertex) -> void {
-            if (vertex >= vertices.size() or vertex >= edges.size()) return;
-
-            vertices.remove(vertex);
-            edges.remove(vertex);
-            std::ranges::remove(edges | std::views::join, vertex, &TargetedEdge::target);
-        }
-
-        template<graph::EdgeType edge_type = graph::EdgeType::Unidirectional>
-        auto remove_edge(std::size_t source_vertex, std::size_t target_vertex) -> void {
-            if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return;
-            if (target_vertex >= vertices.size() or target_vertex >= edges.size()) return;
-
-            std::ranges::remove(edges.at(source_vertex), target_vertex, &TargetedEdge::target);
-
-            if constexpr (edge_type == graph::EdgeType::Bidirectional) {
-                std::ranges::remove(edges.at(target_vertex), source_vertex, &TargetedEdge::target);
-            }
-        }
-
-    private:
-        struct TargetedEdge {
-            Edge edge{};
-            std::size_t target{};
+    [[nodiscard]] auto get_inbound_edges_of(std::size_t vertex) -> std::vector<info&> try {
+        auto isVertexTarget = [&](const auto& target) {
+            return target == vertex;
         };
+        return get_all_edges() | std::views::filter(isVertexTarget, &info::target);
+    } catch (std::out_of_range&) { return {}; }
 
-        std::vector<Vertex> vertices = {};
-        std::vector<std::vector<TargetedEdge>> edges = {};
-    };
+    [[nodiscard]] auto get_all_vertices() -> std::vector<_vertex&> {
+        return {vertices};
+    }
 
-    export template<concepts::VertexCompliant Vertex, concepts::EdgeCompliant Edge>
-    class AdjacencyMatrix {
-    public:
-        using Vertex_t = Vertex;
-        using Edge_t = Edge;
+    [[nodiscard]] auto get_all_edges() -> std::vector<info&> {
+        return edges | std::views::join;
+    }
 
-        using EdgeInfo = graph::EdgeInfo<Edge>;
+    auto remove_vertex(std::size_t vertex) -> void {
+        if (vertex < vertices.size()) vertices.erase(vertices.begin() + vertex);
+        if (vertex < edges.size()) edges.erase(edges.begin() + vertex);
+        std::ranges::remove(edges | std::views::join, vertex, &info::target);
+    }
 
-        auto add_vertex(Vertex&& vertex = {}) -> Vertex& {
-            edges.emplace_back({edges.size(), std::nullopt});
-            for (auto& row : edges) {
-                row.emplace_back(std::nullopt);
-            }
-            return vertices.emplace_back(std::forward<Vertex>(std::move(vertex)));
-        }
+    template<edge_type _edge_type = edge_type::unidirectional>
+    auto remove_edge(std::size_t source_vertex, std::size_t target_vertex) -> void try {
+        std::ranges::remove(edges.at(source_vertex), target_vertex, &info::target);
+        if constexpr (_edge_type == edge_type::bidirectional)
+            std::ranges::remove(edges.at(target_vertex), source_vertex, &info::target);
+    } catch (std::out_of_range&) { return; }
 
-        auto vertex_count() -> std::size_t {
-            return vertices.size();
-        }
+private:
+    using neighbors = std::vector<edge_info<_edge>>;
 
-        template<graph::EdgeType edge_type = graph::EdgeType::Unidirectional>
-        auto add_edge(std::size_t source_vertex, std::size_t target_vertex, Edge&& edge = {}) -> SetError {
-            if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return SetError::SourceVertexNotExist;
-            if (target_vertex >= vertices.size() or target_vertex >= edges.at(source_vertex).size()) return SetError::TargetVertexNotExist;
+    std::vector<_vertex>   vertices = {};
+    std::vector<neighbors> edges    = {};
+};
 
-            if constexpr (edge_type == graph::EdgeType::Bidirectional) {
-                if (target_vertex >= edges.size()) return SetError::TargetVertexNotExist;
-                if (source_vertex >= edges.at(target_vertex).size()) return SetError::SourceVertexNotExist;
-            }
+export template<vertex_like _vertex, edge_like _edge>
+class adjacency_matrix {
+public:
+    using vertex = _vertex;
+    using edge   = _edge;
 
-            auto& added_edge = (edges[source_vertex][target_vertex] = std::forward<Edge>(std::move(edge)));
+    using info = edge_info<_edge*>;
 
-            if constexpr (edge_type == graph::EdgeType::Bidirectional) {
-                edges[target_vertex][source_vertex] = added_edge;
-            }
+    auto add_vertex(_vertex&& vertex = {}) -> _vertex& {
+        edges.emplace_back(edges.size());
+        for (auto& row : edges) row.emplace_back();
+        return vertices.emplace_back(std::forward<_vertex>(vertex));
+    }
 
-            return SetError::Ok;
-        }
+    auto vertex_count() -> std::size_t {
+        return vertices.size();
+    }
 
-        [[nodiscard]] auto get_edge(std::size_t source_vertex, std::size_t target_vertex) -> std::optional<EdgeInfo> {
-            if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return std::nullopt;
-            if (target_vertex >= vertices.size() or target_vertex >= edges.at(source_vertex).size()) return std::nullopt;
+    template<edge_type _edge_type = edge_type::unidirectional>
+    auto add_edge(std::size_t source_vertex, std::size_t target_vertex, _edge&& edge = {})
+        -> bool try {
+        auto val = edges.at(source_vertex).at(target_vertex).emplace(std::forward<_edge>(edge));
+        if constexpr (_edge_type == edge_type::bidirectional)
+            edges.at(target_vertex).at(source_vertex).emplace(val);
+        return true;
+    } catch (std::out_of_range&) { return false; }
 
-            if (not edges[source_vertex][target_vertex].has_value()) {
-                return std::nullopt;
-            }
-            return EdgeInfo {.data = edges[source_vertex][target_vertex].value(), .source = source_vertex, .target = target_vertex};
-        }
+    [[nodiscard]] auto get_edge(std::size_t source_vertex, std::size_t target_vertex)
+        -> std::optional<info> try {
+        return edges.at(source_vertex).at(target_vertex).transform([&](const auto& value) {
+            return info {.data = value, .source = source_vertex, .target = target_vertex};
+        });
+    } catch (std::out_of_range&) { return std::nullopt; }
 
-        [[nodiscard]] auto get_outbound_edges_of(std::size_t vertex) -> std::vector<EdgeInfo> {
-            if (vertex >= vertices.size() or vertex >= edges.size()) return {};
+    [[nodiscard]] auto get_outbound_edges_of(std::size_t vertex) -> std::vector<info> try {
+        auto result = std::vector<info> {};
+        for (const auto& [index, opt] : edges.at(vertex) | std::views::enumerate)
+            if (opt) result.emplace_back(opt.value(), vertex, index);
+        return result;
+    } catch (std::out_of_range&) { return {}; }
 
-            std::vector<EdgeInfo> outbound_edges = {};
-            for (auto index : std::views::iota(0, edges[vertex].size())) {
-                if (edges[vertex][index].has_value()) {
-                    outbound_edges.emplace_back(EdgeInfo{.data = edges[vertex][index].value(), .source = vertex, .target = index});
-                }
-            }
-            return outbound_edges;
-        }
+    [[nodiscard]] auto get_inbound_edges_of(std::size_t vertex) -> std::vector<info> try {
+        auto result = std::vector<info> {};
+        for (const auto& [index, row] : edges | std::views::enumerate)
+            if (row.at(vertex)) result.emplace_back(row.at(vertex).value(), index, vertex);
+        return result;
+    } catch (std::out_of_range&) { return {}; }
 
-        [[nodiscard]] auto get_inbound_edges_of(std::size_t vertex) -> std::vector<EdgeInfo> {
-            if (vertex >= vertices.size() or vertex >= edges.size()) return {};
+    [[nodiscard]] auto get_all_vertices() -> std::vector<_vertex&> {
+        return {vertices};
+    }
 
-            std::vector<EdgeInfo> inbound_edges = {};
-            for (auto index : std::views::iota(0, edges.size())) {
-                if (vertex >= edges[index].size()) throw std::runtime_error{"AdjacencyMatrix is not square"};
+    [[nodiscard]] auto get_all_edges() -> std::vector<info> {
+        auto result = std::vector<info> {};
+        for (const auto& [source, row] : edges | std::views::enumerate)
+            for (const auto& [target, edge] : row | std::views::enumerate)
+                if (edge) result.emplace_back(edge.value(), source, target);
+        return result;
+    }
 
-                if (edges[index][vertex].has_value()) {
-                    inbound_edges.emplace_back(EdgeInfo{.data = edges[index][vertex].value(), .source = index, .target = vertex});
-                }
-            }
-            return inbound_edges;
-        }
+    auto remove_vertex(std::size_t vertex) -> void {
+        if (vertex < vertices.size()) vertices.erase(vertices.begin() + vertex);
+        if (vertex < edges.size()) edges.erase(edges.begin() + vertex);
+        for (auto& row : edges)
+            if (vertex < row.size()) row.erase(row.begin() + vertex);
+    }
 
-        [[nodiscard]] auto get_all_vertices() -> std::vector<Vertex&> {
-            return { vertices };
-        }
+    template<edge_type _edge_type = edge_type::unidirectional>
+    auto remove_edge(std::size_t source_vertex, std::size_t target_vertex) -> void try {
+        edges.at(source_vertex).at(target_vertex).reset();
+        if constexpr (_edge_type == edge_type::bidirectional)
+            edges.at(target_vertex).at(source_vertex).reset();
+    } catch (std::out_of_range&) { return; }
 
-        [[nodiscard]] auto get_all_edges() -> std::vector<EdgeInfo> {
-            std::vector<EdgeInfo> all_edges = {};
+private:
+    using edge_row = std::vector<std::optional<_edge>>;
 
-            for (const auto& source : std::views::iota(0, edges.size())) {
-                for (const auto& target : std::views::iota(0, edges[source].size())) {
-                    if (edges[source][target].has_value()) {
-                        all_edges.emplace_back(EdgeInfo {.data = edges[source][target].value(), .source = source, .target = target});
-                    }
-                }
-            }
-            return all_edges;
-        }
-
-        auto remove_vertex(std::size_t vertex) -> void {
-            if (vertex >= vertices.size() or vertex >= edges.size()) return;
-
-            vertices.remove(vertex);
-            edges.remove(vertex);
-            std::ranges::for_each(edges, [&](auto& row) {
-                row.remove(vertex);
-            });
-        }
-
-        template<graph::EdgeType edge_type = graph::EdgeType::Unidirectional>
-        auto remove_edge(std::size_t source_vertex, std::size_t target_vertex) -> void {
-            if (source_vertex >= vertices.size() or source_vertex >= edges.size()) return;
-            if (target_vertex >= vertices.size() or target_vertex >= edges.at(source_vertex).size()) return;
-
-            edges[source_vertex][target_vertex] = std::nullopt;
-        }
-
-    private:
-        std::vector<Vertex> vertices = {};
-        std::vector<std::vector<std::optional<Edge>>> edges = {};
-    };
-}
+    std::vector<_vertex>  vertices = {};
+    std::vector<edge_row> edges    = {};
+};
+}   // namespace graph_cake
