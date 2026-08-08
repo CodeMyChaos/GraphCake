@@ -2,9 +2,7 @@
 
 using namespace testing;
 
-import graph_cake.representations;
-import graph_cake.graph;
-import graph_cake.types;
+import graph_cake;
 
 namespace graph_cake {
 namespace {

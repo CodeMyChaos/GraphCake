@@ -1,10 +1,11 @@
 set(MODULES concepts.ixx
         deserializer.ixx
-        graph.ixx
-        graphCake.ixx
+        graph_cake.ixx
         representations/adjacency_matrix.ixx
         representations/adjacency_list.ixx
         representations/representations.ixx
+        algorithms/algorithms.ixx
+        algorithms/coloring.ixx
         serializer.ixx
         types.ixx)
 
