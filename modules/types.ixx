@@ -1,19 +1,17 @@
 export module graph_cake.types;
+import graph_cake.concepts;
 
 import std;
-import graph_cake.concepts;
 
 namespace graph_cake {
 export template<class T>
 struct edge_info {
+    using data_t = std::conditional_t<std::is_reference_v<T>,
+                                      std::reference_wrapper<std::remove_reference_t<T>>, T>;
+
     std::size_t source = {};
     std::size_t target = {};
 
-    std::optional<std::reference_wrapper<T>> data = {};
-};
-
-export enum class edge_type {
-    unidirectional,
-    bidirectional
+    std::optional<data_t> data = {};
 };
 }   // namespace graph_cake
