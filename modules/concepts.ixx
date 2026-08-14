@@ -25,6 +25,8 @@ concept edge_like = requires {
     requires std::convertible_to<std::decay_t<T>, double>;
 };
 
+// TODO: Add return type enforcement for the concepts below
+
 export template<class T>
 concept const_graph_interface = requires (const T t, std::size_t n, info<const T> i) {
     requires vertex_like<vertex<const T>>;

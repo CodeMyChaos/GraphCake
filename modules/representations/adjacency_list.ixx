@@ -137,7 +137,7 @@ public:
         if (vertex < self.vertices.size()) self.vertices.erase(self.vertices.begin() + vertex);
         if (vertex < self.edges.size()) self.edges.erase(self.edges.begin() + vertex);
 
-        // REMAKE THE IMPLEMENTATION, THIS ONE DOES NOT WORK
+        // TODO: REMAKE THE IMPLEMENTATION, THIS ONE DOES NOT WORK
 
         auto all_edges = self.edges | std::views::join;
 
@@ -150,7 +150,7 @@ public:
         using S = decltype(self);
         if constexpr (std::is_const_v<S>) return;
 
-        // REMAKE THE IMPLEMENTATION, THIS ONE DOES NOT WORK
+        // TODO: REMAKE THE IMPLEMENTATION, THIS ONE DOES NOT WORK
 
         if (source < self.edges.size())
             (void)std::ranges::remove(self.edges[source], target, &edge_info<_edge>::target);
