@@ -3,6 +3,7 @@ export module graph_cake.representations:adjacency_list;
 import graph_cake.concepts;
 import graph_cake.types;
 import std;
+#include <assert.h>
 
 namespace graph_cake {
 export template<class _vertex, class _edge>
@@ -75,13 +76,13 @@ public:
 
         auto  ret   = edge_pair {};
         auto& first = self.edges[source].emplace_back(source, target, std::forward<_edge>(edge));
-        if (not first.data) return ret;
+        assert(first.data);
         ret.first = info<S> {first.source, first.target, first.data.value()};
 
         if constexpr (_type == edge_type::bidirectional) {
             if (source != target) {
                 auto& second = self.edges[target].emplace_back(first);
-                if (not second.data) return ret;
+                assert(second.data);
                 ret.second = info<S> {second.source, second.target, second.data.value()};
             }
             else { ret.second = ret.first; }
@@ -104,17 +105,21 @@ public:
         using S = decltype(self);
 
         if (vertex >= self.vertices.size()) return std::vector<info<S>> {};
-        return std::vector<info<S>> {self.edges[vertex].begin(), self.edges[vertex].end()};
+
+        auto ret = self.edges[vertex] | std::views::transform([&](const auto& e) {
+                       if (not e.data) return info<S> {e.source, e.target};
+                       return info<S> {e.source, e.target, e.data.value()};
+                   });
+        return std::vector<info<S>> {ret.begin(), ret.end()};
     }
 
     [[nodiscard]] auto get_inbound_edges_of(this auto&& self, std::size_t vertex) noexcept {
         using S = decltype(self);
 
-        auto is_vertex_the_target = [&](const auto& edge) {
-            if (not edge.data) return false;
-            return *edge.data == vertex;
+        auto points_to_vertex = [&](const auto& e) {
+            return e.data ? e.data.value() == vertex : false;
         };
-        auto filtered = self.get_all_edges() | std::views::filter(is_vertex_the_target);
+        auto filtered = self.get_all_edges() | std::views::filter(points_to_vertex);
         return std::vector<info<S>> {filtered.begin(), filtered.end()};
     }
 
@@ -124,10 +129,14 @@ public:
     }
 
     [[nodiscard]] auto get_all_edges(this auto&& self) noexcept {
-        auto ret       = std::vector<info<decltype(self)>> {};
-        auto all_edges = self.edges | std::views::join;
+        using S  = decltype(self);
+        auto ret = std::vector<info<S>> {};
 
-        return std::vector<info<decltype(self)>> {all_edges.begin(), all_edges.end()};
+        auto all_edges = self.edges | std::views::join | std::views::transform([&](const auto& e) {
+                             if (not e.data) return info<S> {e.source, e.target};
+                             return info<S> {e.source, e.target, e.data.value()};
+                         });
+        return std::vector<info<S>> {all_edges.begin(), all_edges.end()};
     }
 
     auto remove_vertex(this auto&& self, std::size_t vertex) {
@@ -137,12 +146,11 @@ public:
         if (vertex < self.vertices.size()) self.vertices.erase(self.vertices.begin() + vertex);
         if (vertex < self.edges.size()) self.edges.erase(self.edges.begin() + vertex);
 
-        // TODO: REMAKE THE IMPLEMENTATION, THIS ONE DOES NOT WORK
+        auto points_to_vertex = [&](const auto& edge) {
+            return edge.target == vertex;
+        };
 
-        auto all_edges = self.edges | std::views::join;
-
-        all_edges.erase(std::ranges::remove(all_edges.begin(), all_edges.end(), vertex,
-                                            &edge_info<_edge>::target));
+        for (auto& outbound : self.edges) std::erase_if(outbound, points_to_vertex);
     }
 
     template<edge_type _type = edge_type::unidirectional>
@@ -150,13 +158,17 @@ public:
         using S = decltype(self);
         if constexpr (std::is_const_v<S>) return;
 
-        // TODO: REMAKE THE IMPLEMENTATION, THIS ONE DOES NOT WORK
+        auto points_to_target = [&](const auto& edge) {
+            return edge.target == target;
+        };
+        auto points_to_source = [&](const auto& edge) {
+            return edge.target == source;
+        };
 
-        if (source < self.edges.size())
-            (void)std::ranges::remove(self.edges[source], target, &edge_info<_edge>::target);
-        if constexpr (_type == edge_type::bidirectional)
-            if (target < self.edges.size())
-                (void)std::ranges::remove(self.edges[target], &edge_info<_edge>::source);
+        if (source < self.edges.size()) std::erase_if(self.edges[source], points_to_target);
+        if constexpr (_type == edge_type::bidirectional) {
+            if (target < self.edges.size()) std::erase_if(self.edges[target], points_to_target);
+        }
     }
 
 private:
